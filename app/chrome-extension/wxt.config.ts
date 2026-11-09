@@ -47,61 +47,19 @@ export default defineConfig({
       'webRequest',
       'webNavigation',
       'debugger',
-      'history',
-      'bookmarks',
       'offscreen',
       'storage',
       'declarativeNetRequest',
       'alarms',
-      // Allow programmatic control of Chrome Side Panel
-      'sidePanel',
     ],
     host_permissions: ['<all_urls>'],
-    options_ui: {
-      page: 'options.html',
-      open_in_tab: true,
-    },
     action: {
       default_popup: 'popup.html',
       default_title: 'Chrome MCP Server',
     },
-    // Chrome Side Panel entry for workflow management
-    // Ref: https://developer.chrome.com/docs/extensions/reference/api/sidePanel
-    side_panel: {
-      default_path: 'sidepanel.html',
-    },
-    // Keyboard shortcuts for quick triggers
-    commands: {
-      // run_quick_trigger_1: {
-      //   suggested_key: { default: 'Ctrl+Shift+1' },
-      //   description: 'Run quick trigger 1',
-      // },
-      // run_quick_trigger_2: {
-      //   suggested_key: { default: 'Ctrl+Shift+2' },
-      //   description: 'Run quick trigger 2',
-      // },
-      // run_quick_trigger_3: {
-      //   suggested_key: { default: 'Ctrl+Shift+3' },
-      //   description: 'Run quick trigger 3',
-      // },
-      // open_workflow_sidepanel: {
-      //   suggested_key: { default: 'Ctrl+Shift+O' },
-      //   description: 'Open workflow sidepanel',
-      // },
-      toggle_web_editor: {
-        suggested_key: { default: 'Ctrl+Shift+O', mac: 'Command+Shift+O' },
-        description: 'Toggle Web Editor mode',
-      },
-      toggle_quick_panel: {
-        suggested_key: { default: 'Ctrl+Shift+U', mac: 'Command+Shift+U' },
-        description: 'Toggle Quick Panel AI Chat',
-      },
-    },
     web_accessible_resources: [
       {
         resources: [
-          '/models/*', // 允许访问 public/models/ 下的所有文件
-          '/workers/*', // 允许访问 workers 文件
           '/inject-scripts/*', // 允许内容脚本注入的助手文件
         ],
         matches: ['<all_urls>'],
@@ -138,10 +96,6 @@ export default defineConfig({
           {
             src: 'inject-scripts/*.js',
             dest: 'inject-scripts',
-          },
-          {
-            src: ['workers/*'],
-            dest: 'workers',
           },
           {
             src: '_locales/**/*',

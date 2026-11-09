@@ -3,6 +3,7 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { TOOL_MESSAGE_TYPES } from '@/common/message-types';
 import { TIMEOUTS, ERROR_MESSAGES } from '@/common/constants';
+import { CDPHelper } from './cdp-input';
 
 interface KeyboardToolParams {
   keys: string; // Required: string representing keys or key combinations to simulate (e.g., "Enter", "Ctrl+C")
@@ -95,6 +96,23 @@ class KeyboardTool extends BaseBrowserToolExecutor {
       }
 
       const frameIds = typeof args.frameId === 'number' ? [args.frameId] : undefined;
+
+      // Synthetic KeyboardEvents never insert text into inputs, so prefer trusted CDP input
+      // and keep the content-script simulation only as a fallback.
+      const trusted = await this.sendTrustedKeys(tab.id, keys, finalSelector, frameIds, delay);
+      if (trusted.ok) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ success: true, engine: 'cdp', message: `Keys sent: ${keys}` }),
+            },
+          ],
+          isError: false,
+        };
+      }
+      if (trusted.fatal) return createErrorResponse(trusted.error || 'Keyboard input failed');
+
       await this.injectContentScript(
         tab.id,
         ['inject-scripts/keyboard-helper.js'],
@@ -139,6 +157,55 @@ class KeyboardTool extends BaseBrowserToolExecutor {
       return createErrorResponse(
         `Error simulating keyboard events: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Focus the target (if any) and send comma-separated key combinations through CDP:
+   * chords ("Ctrl+A") and named keys ("Enter") as key events, other entries as typed text.
+   */
+  private async sendTrustedKeys(
+    tabId: number,
+    keys: string,
+    selector: string | undefined,
+    frameIds: number[] | undefined,
+    delay: number,
+  ): Promise<{ ok: boolean; fatal?: boolean; error?: string }> {
+    if (selector) {
+      const [focused] = await chrome.scripting.executeScript({
+        target: { tabId, frameIds },
+        func: (sel: string) => {
+          const el = document.querySelector(sel) as HTMLElement | null;
+          if (!el) return false;
+          el.focus();
+          return true;
+        },
+        args: [selector],
+      });
+      if (!focused?.result) {
+        return { ok: false, fatal: true, error: `Element with selector "${selector}" not found` };
+      }
+    }
+    const combos = keys
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean);
+    try {
+      await CDPHelper.attach(tabId);
+      for (let i = 0; i < combos.length; i++) {
+        const combo = combos[i];
+        if (combo.length > 1 && combo.includes('+')) await CDPHelper.dispatchKeyChord(tabId, combo);
+        else if (CDPHelper.isNamedKey(combo)) await CDPHelper.dispatchSimpleKey(tabId, combo);
+        else await CDPHelper.insertText(tabId, combo);
+        if (delay > 0 && i < combos.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      await CDPHelper.detach(tabId).catch(() => {});
     }
   }
 }

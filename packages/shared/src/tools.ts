@@ -34,6 +34,7 @@ export const TOOL_NAMES = {
     COMPUTER: 'chrome_computer',
     HANDLE_DIALOG: 'chrome_handle_dialog',
     HANDLE_DOWNLOAD: 'chrome_handle_download',
+    WAIT_FOR: 'chrome_wait_for',
     USERSCRIPT: 'chrome_userscript',
     PERFORMANCE_START_TRACE: 'performance_start_trace',
     PERFORMANCE_STOP_TRACE: 'performance_stop_trace',
@@ -94,69 +95,6 @@ export const TOOL_SCHEMAS: Tool[] = [
   //     required: [],
   //   },
   // },
-  {
-    name: TOOL_NAMES.BROWSER.PERFORMANCE_START_TRACE,
-    description:
-      'Starts a performance trace recording on the selected page. Optionally reloads the page and/or auto-stops after a short duration.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        reload: {
-          type: 'boolean',
-          description:
-            'Determines if, once tracing has started, the page should be automatically reloaded (ignore cache).',
-        },
-        autoStop: {
-          type: 'boolean',
-          description: 'Determines if the trace should be automatically stopped (default false).',
-        },
-        durationMs: {
-          type: 'number',
-          description: 'Auto-stop duration in milliseconds when autoStop is true (default 5000).',
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: TOOL_NAMES.BROWSER.PERFORMANCE_STOP_TRACE,
-    description: 'Stops the active performance trace recording on the selected page.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        saveToDownloads: {
-          type: 'boolean',
-          description: 'Whether to save the trace as a JSON file in Downloads (default true).',
-        },
-        filenamePrefix: {
-          type: 'string',
-          description: 'Optional filename prefix for the downloaded trace JSON.',
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: TOOL_NAMES.BROWSER.PERFORMANCE_ANALYZE_INSIGHT,
-    description:
-      'Provides a lightweight summary of the last recorded trace. For deep insights (CWV, breakdowns), integrate native-side DevTools trace engine.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        insightName: {
-          type: 'string',
-          description:
-            'Optional insight name for future deep analysis (e.g., "DocumentLatency"). Currently informational only.',
-        },
-        timeoutMs: {
-          type: 'number',
-          description:
-            'Timeout for deep analysis via native host (milliseconds). Default 60000. Increase for large traces.',
-        },
-      },
-      required: [],
-    },
-  },
   {
     name: TOOL_NAMES.BROWSER.READ_PAGE,
     description:
@@ -647,114 +585,6 @@ export const TOOL_SCHEMAS: Tool[] = [
       required: [],
     },
   },
-  {
-    name: TOOL_NAMES.BROWSER.HISTORY,
-    description: 'Retrieve and search browsing history from Chrome',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        text: {
-          type: 'string',
-          description:
-            'Text to search for in history URLs and titles. Leave empty to retrieve all history entries within the time range.',
-        },
-        startTime: {
-          type: 'string',
-          description:
-            'Start time as a date string. Supports ISO format (e.g., "2023-10-01", "2023-10-01T14:30:00"), relative times (e.g., "1 day ago", "2 weeks ago", "3 months ago", "1 year ago"), and special keywords ("now", "today", "yesterday"). Default: 24 hours ago',
-        },
-        endTime: {
-          type: 'string',
-          description:
-            'End time as a date string. Supports ISO format (e.g., "2023-10-31", "2023-10-31T14:30:00"), relative times (e.g., "1 day ago", "2 weeks ago", "3 months ago", "1 year ago"), and special keywords ("now", "today", "yesterday"). Default: current time',
-        },
-        maxResults: {
-          type: 'number',
-          description:
-            'Maximum number of history entries to return. Use this to limit results for performance or to focus on the most relevant entries. (default: 100)',
-        },
-        excludeCurrentTabs: {
-          type: 'boolean',
-          description:
-            "When set to true, filters out URLs that are currently open in any browser tab. Useful for finding pages you've visited but don't have open anymore. (default: false)",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: TOOL_NAMES.BROWSER.BOOKMARK_SEARCH,
-    description: 'Search Chrome bookmarks by title and URL',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description:
-            'Search query to match against bookmark titles and URLs. Leave empty to retrieve all bookmarks.',
-        },
-        maxResults: {
-          type: 'number',
-          description: 'Maximum number of bookmarks to return (default: 50)',
-        },
-        folderPath: {
-          type: 'string',
-          description:
-            'Optional folder path or ID to limit search to a specific bookmark folder. Can be a path string (e.g., "Work/Projects") or a folder ID.',
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: TOOL_NAMES.BROWSER.BOOKMARK_ADD,
-    description: 'Add a new bookmark to Chrome',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        url: {
-          type: 'string',
-          description: 'URL to bookmark. If not provided, uses the current active tab URL.',
-        },
-        title: {
-          type: 'string',
-          description: 'Title for the bookmark. If not provided, uses the page title from the URL.',
-        },
-        parentId: {
-          type: 'string',
-          description:
-            'Parent folder path or ID to add the bookmark to. Can be a path string (e.g., "Work/Projects") or a folder ID. If not provided, adds to the "Bookmarks Bar" folder.',
-        },
-        createFolder: {
-          type: 'boolean',
-          description: 'Whether to create the parent folder if it does not exist (default: false)',
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: TOOL_NAMES.BROWSER.BOOKMARK_DELETE,
-    description: 'Delete a bookmark from Chrome',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        bookmarkId: {
-          type: 'string',
-          description: 'ID of the bookmark to delete. Either bookmarkId or url must be provided.',
-        },
-        url: {
-          type: 'string',
-          description: 'URL of the bookmark to delete. Used if bookmarkId is not provided.',
-        },
-        title: {
-          type: 'string',
-          description: 'Title of the bookmark to help with matching when deleting by URL.',
-        },
-      },
-      required: [],
-    },
-  },
   // {
   //   name: TOOL_NAMES.BROWSER.SEARCH_TABS_CONTENT,
   //   description:
@@ -915,6 +745,11 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'boolean',
           description: 'Wait for navigation to complete after click (default: false).',
         },
+        trusted: {
+          type: 'boolean',
+          description:
+            'Click with real mouse input via DevTools (default true) so downloads and popups count as user actions; false dispatches synthetic DOM events.',
+        },
         timeout: {
           type: 'number',
           description: 'Timeout in milliseconds for waiting (default: 5000).',
@@ -974,57 +809,6 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
       },
       required: ['value'],
-    },
-  },
-  {
-    name: TOOL_NAMES.BROWSER.REQUEST_ELEMENT_SELECTION,
-    description:
-      'Request the user to manually select one or more elements on the current page. Use this as a human-in-the-loop fallback when you cannot reliably locate the target element after approximately 3 attempts using chrome_read_page combined with chrome_click_element/chrome_fill_or_select/chrome_computer. The user will see a panel with instructions and can click on the requested elements. Returns element refs compatible with chrome_click_element/chrome_fill_or_select (including iframe frameId for cross-frame support).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        requests: {
-          type: 'array',
-          description:
-            'A list of element selection requests. Each request produces exactly one picked element. The user will see these requests in a panel and select each element by clicking on the page.',
-          minItems: 1,
-          items: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'string',
-                description:
-                  'Optional stable request id for correlation. If omitted, an id is auto-generated (e.g., "req_1").',
-              },
-              name: {
-                type: 'string',
-                description:
-                  'Short label shown to the user describing what element to select (e.g., "Login button", "Email input field").',
-              },
-              description: {
-                type: 'string',
-                description:
-                  'Optional longer instruction shown to the user with more context (e.g., "Click on the primary login button in the top-right corner").',
-              },
-            },
-            required: ['name'],
-          },
-        },
-        timeoutMs: {
-          type: 'number',
-          description:
-            'Timeout in milliseconds for the user to complete all selections. Default: 180000 (3 minutes). Maximum: 600000 (10 minutes).',
-        },
-        tabId: {
-          type: 'number',
-          description: 'Target tab ID. If omitted, uses the current active tab.',
-        },
-        windowId: {
-          type: 'number',
-          description: 'Window ID to select active tab from (when tabId is omitted).',
-        },
-      },
-      required: ['requests'],
     },
   },
   {
@@ -1182,7 +966,8 @@ export const TOOL_SCHEMAS: Tool[] = [
   },
   {
     name: TOOL_NAMES.BROWSER.HANDLE_DIALOG,
-    description: 'Handle JavaScript dialogs (alert/confirm/prompt) via CDP',
+    description:
+      'Handle JavaScript dialogs (alert/confirm/prompt) via CDP. Dialogs opened before the debugger attached cannot be handled: call with arm=true before the action that opens the dialog.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1191,210 +976,50 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'string',
           description: 'Optional prompt text when accepting a prompt',
         },
+        arm: {
+          type: 'boolean',
+          description: 'Return immediately and answer the next dialog this tab opens',
+        },
+        timeoutMs: {
+          type: 'number',
+          description: 'How long an armed handler stays active (default 30000, max 120000)',
+        },
+        tabId: { type: 'number', description: 'Target tab ID (default: active tab)' },
       },
       required: ['action'],
     },
   },
   {
-    name: TOOL_NAMES.BROWSER.GIF_RECORDER,
+    name: TOOL_NAMES.BROWSER.WAIT_FOR,
     description:
-      'Record browser tab activity as an animated GIF.\n\nModes:\n- Fixed FPS mode (action="start"): Captures frames at regular intervals. Good for animations/videos.\n- Auto-capture mode (action="auto_start"): Captures frames automatically when chrome_computer or chrome_navigate actions succeed. Better for interaction recordings with natural pacing.\n\nUse "stop" to end recording and save the GIF.',
+      'Wait until all given conditions hold on a tab: a CSS selector becomes visible/hidden, page text appears/disappears, the URL contains a substring, or the network stays idle. Errors on timeout with the unmet conditions.',
     inputSchema: {
       type: 'object',
       properties: {
-        action: {
+        selector: { type: 'string', description: 'CSS selector to wait for' },
+        text: { type: 'string', description: 'Text to wait for in the page body' },
+        state: {
           type: 'string',
-          enum: ['start', 'stop', 'status', 'auto_start', 'capture', 'clear', 'export'],
-          description:
-            'Action to perform:\n- "start": Begin fixed-FPS recording (captures frames at regular intervals)\n- "auto_start": Begin auto-capture mode (frames captured on tool actions)\n- "stop": End recording and save GIF\n- "status": Get current recording state\n- "capture": Manually trigger a frame capture in auto mode\n- "clear": Clear all recording state and cached GIF without saving\n- "export": Export the last recorded GIF (download or drag&drop upload)',
+          enum: ['visible', 'hidden'],
+          description: 'For selector/text: wait until visible (default) or hidden/absent',
         },
-        tabId: {
-          type: 'number',
-          description:
-            'Target tab ID (default: active tab). Used with "start"/"auto_start" for recording, and with "export" (download=false) for drag&drop upload target.',
-        },
-        fps: {
-          type: 'number',
-          description:
-            'Frames per second for fixed-FPS mode (1-30, default: 5). Higher values = smoother but larger file.',
-        },
-        durationMs: {
-          type: 'number',
-          description:
-            'Maximum recording duration in milliseconds (default: 5000, max: 60000). Only for fixed-FPS mode.',
-        },
-        maxFrames: {
-          type: 'number',
-          description:
-            'Maximum number of frames to capture (default: 50 for fixed-FPS, 100 for auto mode, max: 300).',
-        },
-        width: {
-          type: 'number',
-          description: 'Output GIF width in pixels (default: 800, max: 1920).',
-        },
-        height: {
-          type: 'number',
-          description: 'Output GIF height in pixels (default: 600, max: 1080).',
-        },
-        maxColors: {
-          type: 'number',
-          description:
-            'Maximum colors in palette (default: 256). Lower values = smaller file size.',
-        },
-        filename: {
+        urlIncludes: {
           type: 'string',
-          description: 'Output filename (without extension). Defaults to timestamped name.',
+          description: 'Wait until the tab URL contains this substring',
         },
-        captureDelayMs: {
+        networkIdleMs: {
           type: 'number',
           description:
-            'Auto-capture mode only: Delay in ms after action before capturing frame (default: 150). Allows UI to stabilize.',
+            'Wait until no request has been in flight for this many ms (tracked from the call)',
         },
-        frameDelayCs: {
+        timeout: { type: 'number', description: 'Timeout in ms (default 10000, max 120000)' },
+        tabId: { type: 'number', description: 'Target tab ID (default: active tab)' },
+        windowId: {
           type: 'number',
-          description:
-            'Auto-capture mode only: Display duration per frame in centiseconds (default: 20 = 200ms per frame).',
-        },
-        annotation: {
-          type: 'string',
-          description:
-            'Auto-capture mode only (action="capture"): Optional text label to render on the captured frame.',
-        },
-        download: {
-          type: 'boolean',
-          description:
-            'Export action only: Set to true (default) to download the GIF, or false to upload via drag&drop.',
-        },
-        coordinates: {
-          type: 'object',
-          description:
-            'Export action only (when download=false): Target coordinates for drag&drop upload.',
-          properties: {
-            x: { type: 'number' },
-            y: { type: 'number' },
-          },
-          required: ['x', 'y'],
-        },
-        ref: {
-          type: 'string',
-          description:
-            'Export action only (when download=false): Element ref from chrome_read_page for drag&drop target.',
-        },
-        selector: {
-          type: 'string',
-          description:
-            'Export action only (when download=false): CSS selector for drag&drop target element.',
-        },
-        enhancedRendering: {
-          type: 'object',
-          description:
-            'Auto-capture mode only: Configure visual overlays for recorded actions (click indicators, drag paths, labels). Pass `true` to enable all defaults.',
-          properties: {
-            clickIndicators: {
-              oneOf: [
-                { type: 'boolean' },
-                {
-                  type: 'object',
-                  properties: {
-                    enabled: {
-                      type: 'boolean',
-                      description: 'Enable click indicators (default: true)',
-                    },
-                    color: {
-                      type: 'string',
-                      description:
-                        'CSS color for click indicator (default: "rgba(255, 87, 34, 0.8)")',
-                    },
-                    radius: { type: 'number', description: 'Initial radius in px (default: 20)' },
-                    animationDurationMs: {
-                      type: 'number',
-                      description: 'Animation duration in ms (default: 400)',
-                    },
-                    animationFrames: {
-                      type: 'number',
-                      description: 'Number of animation frames (default: 3)',
-                    },
-                    animationIntervalMs: {
-                      type: 'number',
-                      description: 'Interval between animation frames in ms (default: 80)',
-                    },
-                  },
-                },
-              ],
-              description:
-                'Click indicator overlay config (true for defaults, or object for custom).',
-            },
-            dragPaths: {
-              oneOf: [
-                { type: 'boolean' },
-                {
-                  type: 'object',
-                  properties: {
-                    enabled: {
-                      type: 'boolean',
-                      description: 'Enable drag path rendering (default: true)',
-                    },
-                    color: {
-                      type: 'string',
-                      description: 'CSS color for drag path (default: "rgba(33, 150, 243, 0.7)")',
-                    },
-                    lineWidth: { type: 'number', description: 'Line width in px (default: 3)' },
-                    lineDash: {
-                      type: 'array',
-                      items: { type: 'number' },
-                      description: 'Dash pattern (default: [6, 4])',
-                    },
-                    arrowSize: {
-                      type: 'number',
-                      description: 'Arrow head size in px (default: 10)',
-                    },
-                  },
-                },
-              ],
-              description: 'Drag path overlay config (true for defaults, or object for custom).',
-            },
-            labels: {
-              oneOf: [
-                { type: 'boolean' },
-                {
-                  type: 'object',
-                  properties: {
-                    enabled: {
-                      type: 'boolean',
-                      description: 'Enable action labels (default: true)',
-                    },
-                    font: {
-                      type: 'string',
-                      description: 'Font for labels (default: "bold 12px sans-serif")',
-                    },
-                    textColor: { type: 'string', description: 'Text color (default: "#fff")' },
-                    bgColor: {
-                      type: 'string',
-                      description: 'Background color (default: "rgba(0,0,0,0.7)")',
-                    },
-                    padding: { type: 'number', description: 'Padding in px (default: 4)' },
-                    borderRadius: {
-                      type: 'number',
-                      description: 'Border radius in px (default: 4)',
-                    },
-                    offset: {
-                      type: 'object',
-                      properties: { x: { type: 'number' }, y: { type: 'number' } },
-                      description: 'Offset from action position (default: {x: 10, y: -20})',
-                    },
-                  },
-                },
-              ],
-              description: 'Action label overlay config (true for defaults, or object for custom).',
-            },
-            durationMs: {
-              type: 'number',
-              description: 'How long overlays remain visible in ms (default: 1500).',
-            },
-          },
+          description: 'Window to take the active tab from when tabId is omitted',
         },
       },
-      required: ['action'],
+      required: [],
     },
   },
 ];

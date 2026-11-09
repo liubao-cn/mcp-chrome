@@ -1,7 +1,6 @@
 import { createErrorResponse, ToolResult } from '@/common/tool-handler';
 import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
-import { captureFrameOnAction, isAutoCaptureActive } from './gif-recorder';
 
 // Default window dimensions
 const DEFAULT_WINDOW_WIDTH = 1280;
@@ -24,19 +23,7 @@ interface NavigateToolParams {
 class NavigateTool extends BaseBrowserToolExecutor {
   name = TOOL_NAMES.BROWSER.NAVIGATE;
 
-  /**
-   * Trigger GIF auto-capture after successful navigation
-   */
-  private async triggerAutoCapture(tabId: number, url?: string): Promise<void> {
-    if (!isAutoCaptureActive(tabId)) {
-      return;
-    }
-    try {
-      await captureFrameOnAction(tabId, { type: 'navigate', url });
-    } catch (error) {
-      console.warn('[NavigateTool] Auto-capture failed:', error);
-    }
-  }
+  private async triggerAutoCapture(_tabId: number, _url?: string): Promise<void> {}
 
   async execute(args: NavigateToolParams): Promise<ToolResult> {
     const {
@@ -154,21 +141,21 @@ class NavigateTool extends BaseBrowserToolExecutor {
             // Use host-level wildcard to include all paths; we'll do precise selection later
             const pathWildcard = '/*';
 
+            // "www." variants are only valid for domain names: Chrome rejects patterns such as
+            // http://www.127.0.0.1:3000/* (IP literal) and they make no sense for localhost.
+            const isDomainName =
+              u.hostname.includes('.') &&
+              !u.hostname.startsWith('[') &&
+              !/^\d+(\.\d+){3}$/.test(u.hostname);
             const hostNoWww = u.host.replace(/^www\./, '');
             const hostWithWww = hostNoWww.startsWith('www.') ? hostNoWww : `www.${hostNoWww}`;
-
-            // Keep original host
-            patterns.add(`${u.protocol}//${u.host}${pathWildcard}`);
-            // Add no-www variant
-            patterns.add(`${u.protocol}//${hostNoWww}${pathWildcard}`);
-            // Add www variant
-            patterns.add(`${u.protocol}//${hostWithWww}${pathWildcard}`);
+            const hosts = isDomainName ? [u.host, hostNoWww, hostWithWww] : [u.host];
 
             // Add protocol variant to catch http↔https redirects
             const altProtocol = u.protocol === 'https:' ? 'http:' : 'https:';
-            patterns.add(`${altProtocol}//${u.host}${pathWildcard}`);
-            patterns.add(`${altProtocol}//${hostNoWww}${pathWildcard}`);
-            patterns.add(`${altProtocol}//${hostWithWww}${pathWildcard}`);
+            for (const protocol of [u.protocol, altProtocol]) {
+              for (const host of hosts) patterns.add(`${protocol}//${host}${pathWildcard}`);
+            }
           } else {
             patterns.add(input);
           }

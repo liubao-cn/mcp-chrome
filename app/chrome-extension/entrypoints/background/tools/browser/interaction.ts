@@ -3,10 +3,33 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { TOOL_MESSAGE_TYPES } from '@/common/message-types';
 import { TIMEOUTS, ERROR_MESSAGES } from '@/common/constants';
+import { CDPHelper } from './cdp-input';
 
 interface Coordinates {
   x: number;
   y: number;
+}
+
+/**
+ * Runs in the extension's isolated world (where read_page refs live): scroll the target into
+ * view and return its centre, or null when it is missing, invisible or covered by another element.
+ */
+function locateClickPoint(selector: string | null, ref: string | null): Coordinates | null {
+  let el: Element | null = null;
+  if (ref) {
+    const entry = (window as any).__claudeElementMap?.[ref];
+    el = entry?.deref ? entry.deref() : null;
+  } else if (selector) {
+    el = document.querySelector(selector);
+  }
+  if (!el) return null;
+  el.scrollIntoView({ block: 'center', inline: 'center' });
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const hit = document.elementFromPoint(x, y);
+  return hit && (hit === el || el.contains(hit)) ? { x, y } : null;
 }
 
 interface ClickToolParams {
@@ -24,6 +47,7 @@ interface ClickToolParams {
   modifiers?: { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
   tabId?: number; // target existing tab id
   windowId?: number; // when no tabId, pick active tab from this window
+  trusted?: boolean; // real input via CDP (default true); false forces synthetic DOM events
 }
 
 /**
@@ -96,6 +120,20 @@ class ClickTool extends BaseBrowserToolExecutor {
         }
       }
 
+      if (args.trusted !== false && !frameId) {
+        const trustedResult = await this.tryTrustedClick(tab.id, {
+          selector: finalSelector,
+          ref: finalRef,
+          coordinates,
+          double: args.double === true,
+          button,
+          modifiers,
+          waitForNavigation,
+          timeout,
+        });
+        if (trustedResult) return trustedResult;
+      }
+
       await this.injectContentScript(tab.id, ['inject-scripts/click-helper.js']);
 
       // Send click message to content script
@@ -150,6 +188,105 @@ class ClickTool extends BaseBrowserToolExecutor {
         `Error performing click: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * Click through CDP mouse events so the page sees a real user gesture: downloads are not
+   * treated as automatic, popups are not blocked and activation-gated APIs work.
+   * Returns null when the target cannot be hit directly, so the caller falls back to DOM events.
+   */
+  private async tryTrustedClick(
+    tabId: number,
+    opts: {
+      selector?: string;
+      ref?: string;
+      coordinates?: Coordinates;
+      double: boolean;
+      button?: 'left' | 'right' | 'middle';
+      modifiers?: ClickToolParams['modifiers'];
+      waitForNavigation: boolean;
+      timeout: number;
+    },
+  ): Promise<ToolResult | null> {
+    let point = opts.coordinates ?? null;
+    if (!point) {
+      try {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: locateClickPoint,
+          args: [opts.selector ?? null, opts.ref ?? null],
+        });
+        point = (res?.result as Coordinates | null) ?? null;
+      } catch {
+        return null;
+      }
+    }
+    if (!point) return null;
+
+    try {
+      await CDPHelper.attach(tabId);
+    } catch {
+      return null;
+    }
+    const button = opts.button || 'left';
+    const buttons = button === 'left' ? 1 : button === 'right' ? 2 : 4;
+    const m = opts.modifiers || {};
+    const modifiers =
+      (m.altKey ? 1 : 0) | (m.ctrlKey ? 2 : 0) | (m.metaKey ? 4 : 0) | (m.shiftKey ? 8 : 0);
+    const { x, y } = point;
+    const urlBefore = (await chrome.tabs.get(tabId)).url;
+    try {
+      await CDPHelper.dispatchMouseEvent(tabId, { type: 'mouseMoved', x, y, modifiers });
+      for (let clickCount = 1; clickCount <= (opts.double ? 2 : 1); clickCount++) {
+        await CDPHelper.dispatchMouseEvent(tabId, {
+          type: 'mousePressed',
+          x,
+          y,
+          button,
+          buttons,
+          clickCount,
+          modifiers,
+        });
+        await CDPHelper.dispatchMouseEvent(tabId, {
+          type: 'mouseReleased',
+          x,
+          y,
+          button,
+          buttons: 0,
+          clickCount,
+          modifiers,
+        });
+      }
+    } finally {
+      await CDPHelper.detach(tabId).catch(() => {});
+    }
+
+    let navigationOccurred = false;
+    if (opts.waitForNavigation) {
+      const deadline = Date.now() + opts.timeout;
+      while (Date.now() < deadline) {
+        const current = await chrome.tabs.get(tabId);
+        if (current.status === 'loading' || current.url !== urlBefore) navigationOccurred = true;
+        if (navigationOccurred && current.status === 'complete') break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            message: 'Clicked with trusted input',
+            clickMethod: 'trusted',
+            point: { x: Math.round(x), y: Math.round(y) },
+            navigationOccurred,
+          }),
+        },
+      ],
+      isError: false,
+    };
   }
 }
 

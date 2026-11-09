@@ -2,6 +2,11 @@ import { createErrorResponse, ToolResult } from '@/common/tool-handler';
 import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 
+// Agents usually click first and wait afterwards, so also accept downloads that started
+// shortly before the call.
+const RECENT_DOWNLOAD_WINDOW_MS = 15000;
+const POLL_INTERVAL_MS = 300;
+
 interface HandleDownloadParams {
   filenameContains?: string;
   timeoutMs?: number; // default 60000
@@ -31,93 +36,57 @@ class HandleDownloadTool extends BaseBrowserToolExecutor {
   }
 }
 
+const baseName = (path?: string) => (path || '').split(/[/\\]/).pop() || '';
+
+/**
+ * Poll instead of listening to download events: a small file can be created and finished
+ * before a listener is attached, and Chrome does not replay those events.
+ */
 async function waitForDownload(opts: {
   filenameContains?: string;
   waitForComplete: boolean;
   timeoutMs: number;
 }) {
   const { filenameContains, waitForComplete, timeoutMs } = opts;
-  return new Promise<any>((resolve, reject) => {
-    let timer: any = null;
-    const onError = (err: any) => {
-      cleanup();
-      reject(err instanceof Error ? err : new Error(String(err)));
-    };
-    const cleanup = () => {
-      try {
-        if (timer) clearTimeout(timer);
-      } catch {}
-      try {
-        chrome.downloads.onCreated.removeListener(onCreated);
-      } catch {}
-      try {
-        chrome.downloads.onChanged.removeListener(onChanged);
-      } catch {}
-    };
-    const matches = (item: chrome.downloads.DownloadItem) => {
-      if (!filenameContains) return true;
-      const name = (item.filename || '').split(/[/\\]/).pop() || '';
-      return name.includes(filenameContains) || (item.url || '').includes(filenameContains);
-    };
-    const fulfill = async (item: chrome.downloads.DownloadItem) => {
-      // try to fill more details via downloads.search
-      try {
-        const [found] = await chrome.downloads.search({ id: item.id });
-        const out = found || item;
-        cleanup();
-        resolve({
-          id: out.id,
-          filename: out.filename,
-          url: out.url,
-          mime: (out as any).mime || undefined,
-          fileSize: out.fileSize ?? out.totalBytes ?? undefined,
-          state: out.state,
-          danger: out.danger,
-          startTime: out.startTime,
-          endTime: (out as any).endTime || undefined,
-          exists: (out as any).exists,
-        });
-        return;
-      } catch {
-        cleanup();
-        resolve({ id: item.id, filename: item.filename, url: item.url, state: item.state });
-      }
-    };
-    const onCreated = (item: chrome.downloads.DownloadItem) => {
-      try {
-        if (!matches(item)) return;
-        if (!waitForComplete) {
-          fulfill(item);
-        }
-      } catch {}
-    };
-    const onChanged = (delta: chrome.downloads.DownloadDelta) => {
-      try {
-        if (!delta || typeof delta.id !== 'number') return;
-        // pull item and check
-        chrome.downloads
-          .search({ id: delta.id })
-          .then((arr) => {
-            const item = arr && arr[0];
-            if (!item) return;
-            if (!matches(item)) return;
-            if (waitForComplete && item.state === 'complete') fulfill(item);
-          })
-          .catch(() => {});
-      } catch {}
-    };
-    chrome.downloads.onCreated.addListener(onCreated);
-    chrome.downloads.onChanged.addListener(onChanged);
-    timer = setTimeout(() => onError(new Error('Download wait timed out')), timeoutMs);
-    // Try to find an already-running matching download
-    chrome.downloads
-      .search({ state: waitForComplete ? 'in_progress' : undefined })
-      .then((arr) => {
-        const hit = (arr || []).find((d) => matches(d));
-        if (hit && !waitForComplete) fulfill(hit);
-      })
-      .catch(() => {});
-  });
+  const matches = (item: chrome.downloads.DownloadItem) =>
+    !filenameContains ||
+    baseName(item.filename).includes(filenameContains) ||
+    (item.url || '').includes(filenameContains) ||
+    (item.finalUrl || '').includes(filenameContains);
+  const startedAfter = new Date(Date.now() - RECENT_DOWNLOAD_WINDOW_MS).toISOString();
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    const items = await chrome.downloads.search({ startedAfter, orderBy: ['-startTime'] });
+    const latest = items.find(matches);
+    if (latest?.state === 'complete' || (latest && !waitForComplete)) {
+      return {
+        id: latest.id,
+        filename: latest.filename,
+        url: latest.url,
+        mime: latest.mime || undefined,
+        fileSize: latest.fileSize ?? latest.totalBytes ?? undefined,
+        state: latest.state,
+        danger: latest.danger,
+        startTime: latest.startTime,
+        endTime: latest.endTime || undefined,
+        exists: latest.exists,
+      };
+    }
+    if (latest?.state === 'interrupted') {
+      throw new Error(
+        `Download interrupted (${latest.error || 'unknown reason'}): ${baseName(latest.filename) || latest.url}`,
+      );
+    }
+    if (Date.now() >= deadline) {
+      const recent = items
+        .slice(0, 5)
+        .map((d) => `${baseName(d.filename) || '(unnamed)'} [${d.state}]`)
+        .join('; ');
+      throw new Error(`Download wait timed out${recent ? `; recent downloads: ${recent}` : ''}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
 }
 
 export const handleDownloadTool = new HandleDownloadTool();

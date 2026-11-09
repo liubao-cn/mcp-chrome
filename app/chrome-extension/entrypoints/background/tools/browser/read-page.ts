@@ -3,7 +3,6 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { TOOL_MESSAGE_TYPES } from '@/common/message-types';
 import { ERROR_MESSAGES } from '@/common/constants';
-import { listMarkersForUrl } from '@/entrypoints/background/element-marker/element-marker-storage';
 
 interface ReadPageStats {
   processed: number;
@@ -55,9 +54,7 @@ class ReadPageTool extends BaseBrowserToolExecutor {
       if (!tab.id)
         return createErrorResponse(ERROR_MESSAGES.TAB_NOT_FOUND + ': Active tab has no ID');
 
-      // Load any user-marked elements for this URL (priority hints)
-      const currentUrl = String(tab.url || '');
-      const userMarkers = currentUrl ? await listMarkersForUrl(currentUrl) : [];
+      const userMarkers: any[] = [];
 
       // Inject helper in ISOLATED world to enable chrome.runtime messaging
       // Inject into all frames to support same-origin iframe operations
