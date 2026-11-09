@@ -25,15 +25,87 @@
       <button @click="copyMcpConfig">{{ copyButtonText }}</button>
     </div>
 
-    <pre class="config">{{ mcpConfigJson }}</pre>
+    <section class="capabilities">
+      <h2>能做什么（{{ toolCount }} 个工具）</h2>
+      <table>
+        <tbody>
+          <tr v-for="row in capabilityRows" :key="row.label">
+            <th>{{ row.label }}</th>
+            <td>
+              <div>{{ row.summary }}</div>
+              <div class="tool-names">{{ row.tools.join(' · ') }}</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <details class="config-block">
+      <summary>MCP 配置</summary>
+      <pre class="config">{{ mcpConfigJson }}</pre>
+    </details>
+
+    <footer>扩展 v{{ version }} · slim 精简版</footer>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { TOOL_NAMES, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import { BACKGROUND_MESSAGE_TYPES } from '@/common/message-types';
 
 type ServerStatus = { isRunning: boolean; port?: number; lastUpdated?: number };
+
+const B = TOOL_NAMES.BROWSER;
+const CAPABILITY_GROUPS: { label: string; summary: string; tools: string[] }[] = [
+  {
+    label: '标签页',
+    summary: '列出、打开、切换、关闭标签页和窗口',
+    tools: [B.GET_WINDOWS_AND_TABS, B.NAVIGATE, B.SWITCH_TAB, B.CLOSE_TABS],
+  },
+  {
+    label: '读页面',
+    summary: '读页面结构（可只取可交互元素）、取正文、截图',
+    tools: [B.READ_PAGE, B.WEB_FETCHER, B.SCREENSHOT],
+  },
+  {
+    label: '操作',
+    summary: '真实鼠标点击、填表和下拉、键盘输入、按坐标拖拽和滚动',
+    tools: [B.CLICK, B.FILL, B.KEYBOARD, B.COMPUTER],
+  },
+  {
+    label: '等待',
+    summary: '等元素出现或消失、等文字、等网址变化、等网络空闲',
+    tools: [B.WAIT_FOR],
+  },
+  {
+    label: '调试',
+    summary: '执行 JS、看控制台、抓网络请求、带登录态发请求',
+    tools: [B.JAVASCRIPT, B.CONSOLE, B.NETWORK_CAPTURE, B.NETWORK_REQUEST],
+  },
+  {
+    label: '文件与弹窗',
+    summary: '上传文件、等下载完成、处理 alert / confirm / prompt',
+    tools: [B.FILE_UPLOAD, B.HANDLE_DOWNLOAD, B.HANDLE_DIALOG],
+  },
+];
+
+// Driven by the schemas actually exposed over MCP, so the table cannot drift from the tool list.
+const exposedTools = TOOL_SCHEMAS.map((tool) => tool.name);
+const groupedTools = new Set(CAPABILITY_GROUPS.flatMap((group) => group.tools));
+const ungroupedTools = exposedTools.filter((name) => !groupedTools.has(name));
+const shortName = (name: string) => name.replace(/^chrome_/, '');
+const capabilityRows = [
+  ...CAPABILITY_GROUPS.map((group) => ({
+    ...group,
+    tools: group.tools.filter((name) => exposedTools.includes(name)).map(shortName),
+  })),
+  ...(ungroupedTools.length
+    ? [{ label: '其他', summary: '未归类的工具', tools: ungroupedTools.map(shortName) }]
+    : []),
+].filter((row) => row.tools.length > 0);
+const toolCount = exposedTools.length;
+const version = chrome.runtime.getManifest().version;
 
 const nativeConnectionStatus = ref<'connected' | 'disconnected' | 'unknown'>('unknown');
 const serverStatus = ref<ServerStatus>({ isRunning: false });
@@ -147,7 +219,8 @@ onUnmounted(() => chrome.runtime.onMessage.removeListener(onMessage));
 
 <style scoped>
 .slim-popup {
-  width: 320px;
+  box-sizing: border-box;
+  width: 100%;
   padding: 16px;
   font:
     13px/1.5 -apple-system,
@@ -186,11 +259,53 @@ h1 {
   cursor: pointer;
 }
 .config {
-  margin: 0;
+  margin: 6px 0 0;
   padding: 8px;
   background: #f3f4f6;
   border-radius: 6px;
   font-size: 11px;
   white-space: pre-wrap;
+}
+.capabilities h2 {
+  margin: 4px 0 6px;
+  font-size: 13px;
+}
+.capabilities table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.capabilities th,
+.capabilities td {
+  padding: 5px 4px;
+  border-top: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+.capabilities th {
+  width: 64px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tool-names {
+  margin-top: 2px;
+  color: #6b7280;
+  font:
+    10px/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.config-block {
+  margin-top: 10px;
+}
+.config-block summary {
+  cursor: pointer;
+  color: #374151;
+}
+footer {
+  margin-top: 10px;
+  color: #9ca3af;
+  font-size: 11px;
 }
 </style>

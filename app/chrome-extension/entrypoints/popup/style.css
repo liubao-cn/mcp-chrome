@@ -76,7 +76,8 @@ body {
   width: 400px;
   min-height: 500px;
   max-height: 600px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   font-family: inherit;
   background: var(--bg-secondary);
   color: var(--text-primary);
